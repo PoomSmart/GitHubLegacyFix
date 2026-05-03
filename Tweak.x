@@ -153,7 +153,7 @@ static NSData *patchedBodyForGraphQLRequest(NSData *body) {
     return (!err && newBody) ? newBody : body;
 }
 
-static BOOL injectMissingProjectCards(id node) {
+static BOOL injectRemovedFieldStubs(id node) {
     if ([node isKindOfClass:[NSMutableDictionary class]]) {
         NSMutableDictionary *dict = (NSMutableDictionary *)node;
         BOOL modified = NO;
@@ -222,13 +222,13 @@ static BOOL injectMissingProjectCards(id node) {
             modified = YES;
         }
         for (id value in dict.allValues) {
-            if (injectMissingProjectCards(value)) modified = YES;
+            if (injectRemovedFieldStubs(value)) modified = YES;
         }
         return modified;
     } else if ([node isKindOfClass:[NSMutableArray class]]) {
         BOOL modified = NO;
         for (id item in (NSMutableArray *)node) {
-            if (injectMissingProjectCards(item)) modified = YES;
+            if (injectRemovedFieldStubs(item)) modified = YES;
         }
         return modified;
     }
@@ -278,7 +278,7 @@ static NSData *patchedGraphQLResponse(NSData *responseData, NSString *variantTag
         needsReserialise = YES;
     }
 
-    if (injectMissingProjectCards(data)) {
+    if (injectRemovedFieldStubs(data)) {
         needsReserialise = YES;
     }
 
