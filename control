@@ -5,7 +5,7 @@ Version: 1.0.0
 Architecture: iphoneos-arm
 Description: Fixes up GraphQL fields to make old GitHub iOS app work again.
 Section: Tweaks
-Maintainer: poomsmart
-Author: poomsmart
+Maintainer: PoomSmart
+Author: PoomSmart
 Depiction: https://poomsmart.github.io/repo/depictions/githublegacyfix.html
 Sileodepiction: https://poomsmart.github.io/repo/sileodepictions/githublegacyfix.json
