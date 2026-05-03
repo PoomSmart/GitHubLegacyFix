@@ -1,7 +1,3 @@
-// GitHubLegacyFix — strips deprecated projectCards / renderMobileTasklistBlocks fields
-// from outbound GraphQL requests and re-injects a stub projectCards into responses so
-// Apollo's compiled decoder doesn't throw a missing-key error.
-
 #import <Foundation/Foundation.h>
 #import <HBLog.h>
 
