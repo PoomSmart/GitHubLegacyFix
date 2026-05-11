@@ -11,10 +11,12 @@ Old versions of the GitHub app embed Apollo-generated GraphQL queries that refer
 | `projectCards` on `Issue`/`PullRequest` | 1.148.0+ | `projectItems` (Projects V2) |
 | `renderMobileTasklistBlocks: true` argument on `bodyHTML()` | 1.148.0+ | Argument dropped |
 | `projectNextItems` on `Issue`/`PullRequest` | ~1.78.0 | `projectItems` (Projects V2) |
-| `projectsNext` on `User`/`Organization`/`Repository` | ~1.78.0 | `projects` (Projects V2) |
+| `projectsNext` on `User`/`Organization`/`Repository` | ~1.78.0 | `projectsV2` (Projects V2) |
 | `ProjectNext*` types | ~1.78.0 | `ProjectV2*` types |
 
-When the server receives any of these, it returns a GraphQL error. Apollo's error handling in these old app versions results in a "Something went wrong." screen on issue, pull request, repository, and profile pages.
+When the server receives any of these, it returns a GraphQL `undefinedField` error. Apollo's error handling in these old app versions results in a "Something went wrong." screen on issue, pull request, repository, and profile pages.
+
+**Mixed-error responses:** Queries like `UserProfileQuery` fetch both a `user` and an `organization` root field in a single request. When viewing an org profile, `user` correctly returns `null` alongside a `NOT_FOUND` error, while `organization` returns full data alongside a `projectsNext undefinedField` error. The tweak handles this by stripping only `undefinedField` errors for known legacy fields and preserving all other errors, so Apollo's partial-data handling works correctly.
 
 ## What it does
 

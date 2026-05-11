@@ -77,6 +77,17 @@ static NSString *removeFieldBlock(NSString *query, NSString *fieldName) {
     return [result copy];
 }
 
+// Remove every occurrence of a field block from a query.
+static NSString *removeAllFieldBlocks(NSString *query, NSString *fieldName) {
+    NSString *current = query;
+    for (NSUInteger i = 0; i < 64; i++) {
+        NSString *next = removeFieldBlock(current, fieldName);
+        if ([next isEqualToString:current]) break;
+        current = next;
+    }
+    return current;
+}
+
 static BOOL isGitHubGraphQLRequest(NSURLRequest *request) {
     return [request.URL.host isEqualToString:@"api.github.com"] &&
            [request.URL.path isEqualToString:@"/graphql"] &&
@@ -127,7 +138,7 @@ static NSData *patchedBodyForGraphQLRequest(NSData *body) {
                           options:0
                             range:NSMakeRange(0, q.length)];
     // `projectsNext` field on User — also removed from schema (Projects V2 Next).
-    NSString *q2 = removeFieldBlock(q, @"projectsNext");
+    NSString *q2 = removeAllFieldBlocks(q, @"projectsNext");
     NSString *cleaned = removeFragmentDefinition(q2, @"IssueProjectCardFragment");
     cleaned = removeFragmentDefinition(cleaned, @"PullRequestProjectCardFragment");
     // ProjectProgressFieldsFragment is only referenced by the two fragments above;
@@ -147,6 +158,35 @@ static NSData *patchedBodyForGraphQLRequest(NSData *body) {
 
     NSData *newBody = [NSJSONSerialization dataWithJSONObject:dict options:0 error:&err];
     return (!err && newBody) ? newBody : body;
+}
+
+static BOOL isSuppressedLegacyGraphQLError(NSDictionary *error) {
+    if (![error isKindOfClass:[NSDictionary class]]) return NO;
+
+    NSDictionary *extensions = error[@"extensions"];
+    NSString *code = [extensions isKindOfClass:[NSDictionary class]] ? extensions[@"code"] : nil;
+    NSString *fieldName = [extensions isKindOfClass:[NSDictionary class]] ? extensions[@"fieldName"] : nil;
+    NSString *message = [error[@"message"] isKindOfClass:[NSString class]] ? error[@"message"] : nil;
+
+    static NSSet<NSString *> *sLegacyFields = nil;
+    if (!sLegacyFields) {
+        sLegacyFields = [NSSet setWithObjects:@"projectCards", @"projectNextItems", @"projectsNext", nil];
+    }
+
+    if ([code isEqualToString:@"undefinedField"] && [sLegacyFields containsObject:fieldName]) {
+        return YES;
+    }
+
+    if (message.length > 0) {
+        for (NSString *legacyField in sLegacyFields) {
+            NSString *needle = [NSString stringWithFormat:@"Field '%@' doesn't exist on type", legacyField];
+            if ([message containsString:needle]) {
+                return YES;
+            }
+        }
+    }
+
+    return NO;
 }
 
 static BOOL injectRemovedFieldStubs(id node) {
@@ -250,28 +290,55 @@ static NSData *patchedGraphQLResponse(NSData *responseData, NSString *variantTag
     HBLogDebug(@"[GitHubLegacyFix] [%@] Response (%.2000s)", variantTag, responseStr.UTF8String);
 #endif
 
-    if (!data || data == [NSNull null]) return responseData;
-
     BOOL needsReserialise = NO;
 
     if (errors.count > 0) {
-        static NSSet<NSString *> *sRealErrorTypes = nil;
-        if (!sRealErrorTypes) {
-            sRealErrorTypes = [NSSet setWithObjects:
-                @"NOT_FOUND", @"FORBIDDEN", @"UNAUTHORIZED", @"INTERNAL",
-                @"MAX_NODE_LIMIT_EXCEEDED", @"RATE_LIMITED", @"SERVICE_UNAVAILABLE",
-                @"INSUFFICIENT_SCOPES", @"MISSING_REQUIRED_PARAMETERS", nil];
-        }
+        NSMutableArray *keptErrors = [NSMutableArray array];
+        NSUInteger strippedCount = 0;
         for (NSDictionary *e in errors) {
-            NSString *etype = e[@"type"];
-            if (etype && [sRealErrorTypes containsObject:etype]) {
-                return responseData;
+            // Always strip deprecated-field validation errors regardless of other errors
+            // in the same response (e.g. NOT_FOUND for user: null on an org profile query).
+            if (isSuppressedLegacyGraphQLError(e)) {
+                strippedCount++;
+#if DEBUG
+                NSDictionary *ext = [e[@"extensions"] isKindOfClass:[NSDictionary class]] ? e[@"extensions"] : nil;
+                HBLogDebug(@"[GitHubLegacyFix] [%@] Stripping legacy field error: fieldName=%@ typeName=%@",
+                      variantTag, ext[@"fieldName"], ext[@"typeName"]);
+#endif
+                continue;
             }
+
+            // Keep real server/auth errors so Apollo surfaces them correctly.
+            [keptErrors addObject:e];
+#if DEBUG
+            NSString *etype = [e[@"type"] isKindOfClass:[NSString class]] ? e[@"type"] : @"<no type>";
+            NSString *msg = [e[@"message"] isKindOfClass:[NSString class]] ? e[@"message"] : @"<no message>";
+            HBLogDebug(@"[GitHubLegacyFix] [%@] Keeping real GraphQL error type=%@ message=%@", variantTag, etype, msg);
+#endif
         }
 
-        [dict removeObjectForKey:@"errors"];
-        HBLogDebug(@"[GitHubLegacyFix] [%@] Stripped %lu deprecated-field error(s)", variantTag, (unsigned long)errors.count);
-        needsReserialise = YES;
+        if (keptErrors.count == 0) {
+            [dict removeObjectForKey:@"errors"];
+        } else {
+            dict[@"errors"] = keptErrors;
+        }
+
+        if (strippedCount > 0) {
+            HBLogDebug(@"[GitHubLegacyFix] [%@] Stripped %lu GraphQL error(s)", variantTag, (unsigned long)strippedCount);
+            needsReserialise = YES;
+        }
+    }
+
+    if (!data || data == [NSNull null]) {
+        if (!needsReserialise) return responseData;
+        NSData *cleaned = [NSJSONSerialization dataWithJSONObject:dict options:0 error:&err];
+        if (!err && cleaned) {
+            HBLogDebug(@"[GitHubLegacyFix] [%@] Patched error-only response %lu → %lu bytes",
+                  variantTag, (unsigned long)responseData.length, (unsigned long)cleaned.length);
+            return cleaned;
+        }
+        HBLogDebug(@"[GitHubLegacyFix] [%@] Re-serialisation failed: %@", variantTag, err);
+        return responseData;
     }
 
     if (injectRemovedFieldStubs(data)) {
