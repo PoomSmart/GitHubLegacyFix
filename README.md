@@ -10,9 +10,9 @@ Old versions of the GitHub app embed Apollo-generated GraphQL queries that refer
 |---|---|---|
 | `projectCards` on `Issue`/`PullRequest` | 1.148.0+ | `projectItems` (Projects V2) |
 | `renderMobileTasklistBlocks: true` argument on `bodyHTML()` | 1.148.0+ | Argument dropped |
-| `projectNextItems` on `Issue`/`PullRequest` | ~1.78.0 | `projectItems` (Projects V2) |
-| `projectsNext` on `User`/`Organization`/`Repository` | ~1.78.0 | `projectsV2` (Projects V2) |
-| `ProjectNext*` types | ~1.78.0 | `ProjectV2*` types |
+| `projectNextItems` on `Issue`/`PullRequest` | ~1.43.0 - ~1.78.0 | `projectItems` (Projects V2) |
+| `projectsNext` on `User`/`Organization`/`Repository` | ~1.43.0 - ~1.78.0 | `projectsV2` (Projects V2) |
+| `ProjectNext*` types | ~1.43.0 - ~1.78.0 | `ProjectV2*` types |
 
 When the server receives any of these, it returns a GraphQL `undefinedField` error. Apollo's error handling in these old app versions results in a "Something went wrong." screen on issue, pull request, repository, and profile pages.
 
@@ -32,10 +32,11 @@ When the server receives any of these, it returns a GraphQL `undefinedField` err
 
 | GitHub iOS | iOS |
 |---|---|
+| 1.43.0 | 13+ |
 | 1.78.0 | 14+ |
 | 1.148.0 | 15+ |
 
 ## Requirements
 
 - Jailbroken device
-- iOS 14.0 – 15.8
+- iOS 13.0 – 15.8

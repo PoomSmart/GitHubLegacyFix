@@ -1,7 +1,7 @@
 Package: com.ps.githublegacyfix
 Name: GitHub Legacy Fix
-Depends: mobilesubstrate, firmware (>= 14.0), firmware (<< 16.0)
-Version: 1.0.1
+Depends: mobilesubstrate, firmware (>= 13.0), firmware (<< 16.0)
+Version: 1.0.2
 Architecture: iphoneos-arm
 Description: Fixes up GraphQL fields to make old GitHub iOS app work again.
 Section: Tweaks
